@@ -29,8 +29,8 @@ jobs:
           context: .  # Use the current directory as the build context
           push: true  # Push the image to the registry
           tags: |
-            ghcr.io/${{ github.repository_owner }}/tcp-server-chat:latest
-            ghcr.io/${{ github.repository_owner}}/tcp-server-chat:${{ github.sha }}
+            ghcr.io/omotolani98/tcp-server-chat:latest
+            ghcr.io/omotolani98/tcp-server-chat:${{ github.sha }}
 
       # Step 4: Post-build cleanup (optional)
       - name: Clean up dangling images
