@@ -110,8 +110,8 @@ func broadcast(message string, sender net.Conn) {
 }
 
 func handlePrivateMessage(message, senderName string, senderConn net.Conn) {
-	parts := strings.Split(message, " ")
-	if len(parts) != 3 {
+	parts := strings.SplitN(message, " ", 3)
+	if len(parts) < 3 {
 		_, _ = senderConn.Write([]byte("Invalid format. Use /msg <username> <message>\n"))
 		return
 	}
