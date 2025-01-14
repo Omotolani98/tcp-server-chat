@@ -48,17 +48,18 @@ func handleClient(conn net.Conn) {
 	clients[conn] = name
 	clientsMux.Unlock()
 
-	broadcast(fmt.Sprintf("%s has joined the chat!", name), conn)
+	broadcastSystemNotification(fmt.Sprintf("%s has joined the chat!", name), conn, "you have joined the chat :)")
 	fmt.Printf("Client %s connected\n", name)
 
 	for {
+		//_, _ = conn.Write([]byte("me: "))
 		message, err := reader.ReadString('\n')
 		if err != nil {
 			fmt.Printf("Client %s disconnected\n", name)
 			clientsMux.Lock()
 			delete(clients, conn)
 			clientsMux.Unlock()
-			broadcast(fmt.Sprintf("%s has left the chat!", name), conn)
+			broadcastSystemNotification(fmt.Sprintf("%s has left the chat!", name), conn, "you have left the chat :(")
 			return
 		}
 
@@ -73,8 +74,22 @@ func handleClient(conn net.Conn) {
 		} else if strings.HasPrefix(message, "/users") {
 			listActiveUsers(conn)
 		} else {
-			timestamp := time.Now().Format("15:04:05")
-			broadcast(fmt.Sprintf("[%s] %s: %s", timestamp, name, message), conn)
+			//timestamp := time.Now().Format("15:04:05")
+			broadcast(fmt.Sprintf("%s", message), conn)
+		}
+	}
+}
+
+func broadcastSystemNotification(message string, sender net.Conn, senderMessage string) {
+	clientsMux.Lock()
+	defer clientsMux.Unlock()
+
+	timestamp := time.Now().Format("15:04:05")
+	for client := range clients {
+		if client == sender {
+			_, _ = client.Write([]byte(fmt.Sprintf("[%s] %s\n", timestamp, senderMessage)))
+		} else {
+			_, _ = client.Write([]byte(fmt.Sprintf("[%s] %s\n", timestamp, message)))
 		}
 	}
 }
@@ -83,9 +98,13 @@ func broadcast(message string, sender net.Conn) {
 	clientsMux.Lock()
 	defer clientsMux.Unlock()
 
+	timestamp := time.Now().Format("15:04:05")
+	senderName := clients[sender]
 	for client := range clients {
-		if client != sender {
-			client.Write([]byte(message + "\r\n"))
+		if client == sender {
+			_, _ = client.Write([]byte(fmt.Sprintf("[%s] me: %s\n", timestamp, message)))
+		} else {
+			_, _ = client.Write([]byte(fmt.Sprintf("[%s] %s: %s\n", timestamp, senderName, message)))
 		}
 	}
 }
