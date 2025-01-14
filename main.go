@@ -3,16 +3,12 @@ package main
 import (
 	"bufio"
 	"fmt"
+	"github.com/Omotolani98/tcp-server-chat/pkg"
 	"net"
 	"strings"
-	"sync"
-	"time"
 )
 
-var (
-	clients    = make(map[net.Conn]string)
-	clientsMux sync.Mutex
-)
+var clientManager = pkg.NewClientManager()
 
 func main() {
 	server, err := net.Listen("tcp", ":5080")
@@ -39,27 +35,22 @@ func handleClient(conn net.Conn) {
 	defer conn.Close()
 
 	//get client name
-	conn.Write([]byte("Welcome to the chat server!\nEnter your name: "))
+	_, _ = conn.Write([]byte("Welcome to the chat server!\nEnter your name: "))
 	reader := bufio.NewReader(conn)
 	name, _ := reader.ReadString('\n')
 	name = strings.TrimSpace(name)
 
-	clientsMux.Lock()
-	clients[conn] = name
-	clientsMux.Unlock()
+	clientManager.AddClient(conn, name)
 
-	broadcastSystemNotification(fmt.Sprintf("%s has joined the chat!", name), conn, "you have joined the chat :)")
+	pkg.BroadcastSystemNotification(fmt.Sprintf("%s has joined the chat!", name), conn, "you have joined the chat :)", clientManager)
 	fmt.Printf("Client %s connected\n", name)
 
 	for {
-		//_, _ = conn.Write([]byte("me: "))
 		message, err := reader.ReadString('\n')
 		if err != nil {
 			fmt.Printf("Client %s disconnected\n", name)
-			clientsMux.Lock()
-			delete(clients, conn)
-			clientsMux.Unlock()
-			broadcastSystemNotification(fmt.Sprintf("%s has left the chat!", name), conn, "you have left the chat :(")
+			clientManager.RemoveClient(conn)
+			pkg.BroadcastSystemNotification(fmt.Sprintf("%s has joined the chat!", name), conn, "you have joined the chat :)", clientManager)
 			return
 		}
 
@@ -69,77 +60,22 @@ func handleClient(conn net.Conn) {
 			continue
 		}
 
-		if strings.HasPrefix(message, "/msg") {
-			handlePrivateMessage(message, name, conn)
+		if strings.HasPrefix(message, "/create") {
+			pkg.CreateGroup(message, name, conn)
+		} else if strings.HasPrefix(message, "/join") {
+			pkg.JoinGroup(message, name, conn)
+		} else if strings.HasPrefix(message, "/groups") {
+			pkg.ListGroups(conn)
+		} else if strings.HasPrefix(message, "/members") {
+			pkg.ListGroupMembers(message, conn)
+		} else if strings.HasPrefix(message, "/gmsg") {
+			pkg.GroupMessage(message, name, conn)
+		} else if strings.HasPrefix(message, "/msg") {
+			pkg.HandlePrivateMessage(message, name, conn)
 		} else if strings.HasPrefix(message, "/users") {
-			listActiveUsers(conn)
+			pkg.ListActiveUsers(conn)
 		} else {
-			//timestamp := time.Now().Format("15:04:05")
-			broadcast(fmt.Sprintf("%s", message), conn)
+			pkg.Broadcast(fmt.Sprintf("%s", message), conn, clientManager)
 		}
-	}
-}
-
-func broadcastSystemNotification(message string, sender net.Conn, senderMessage string) {
-	clientsMux.Lock()
-	defer clientsMux.Unlock()
-
-	timestamp := time.Now().Format("15:04:05")
-	for client := range clients {
-		if client == sender {
-			_, _ = client.Write([]byte(fmt.Sprintf("[%s] %s\n", timestamp, senderMessage)))
-		} else {
-			_, _ = client.Write([]byte(fmt.Sprintf("[%s] %s\n", timestamp, message)))
-		}
-	}
-}
-
-func broadcast(message string, sender net.Conn) {
-	clientsMux.Lock()
-	defer clientsMux.Unlock()
-
-	timestamp := time.Now().Format("15:04:05")
-	senderName := clients[sender]
-	for client := range clients {
-		if client == sender {
-			_, _ = client.Write([]byte(fmt.Sprintf("[%s] me: %s\n", timestamp, message)))
-		} else {
-			_, _ = client.Write([]byte(fmt.Sprintf("[%s] %s: %s\n", timestamp, senderName, message)))
-		}
-	}
-}
-
-func handlePrivateMessage(message, senderName string, senderConn net.Conn) {
-	parts := strings.SplitN(message, " ", 3)
-	if len(parts) < 3 {
-		_, _ = senderConn.Write([]byte("Invalid format. Use /msg <username> <message>\n"))
-		return
-	}
-
-	username := parts[1]
-	privateMessage := parts[2]
-
-	clientsMux.Lock()
-	defer clientsMux.Unlock()
-
-	for client, name := range clients {
-		if name == username {
-			timestamp := time.Now().Format("15:04:05")
-			_, _ = client.Write([]byte(fmt.Sprintf("[%s] [Private] %s: %s \r\n", timestamp, senderName, privateMessage)))
-			_, _ = senderConn.Write([]byte(fmt.Sprintf("[%s] [To] %s: %s \r\n", timestamp, username, privateMessage)))
-			return
-		}
-	}
-
-	_, _ = senderConn.Write([]byte("User not found\n"))
-}
-
-func listActiveUsers(conn net.Conn) {
-	clientsMux.Lock()
-	defer clientsMux.Unlock()
-
-	_, _ = conn.Write([]byte("Active users:\n"))
-	for _, name := range clients {
-		_, _ = conn.Write([]byte("- " + name + "\n"))
 	}
 }
